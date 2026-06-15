@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  PLACEHOLDER VNGGames wordmark — swap this file with the official logo.
+  Rendered at 22px tall in the top nav (see appShell.css .app-nav__logo).
+  Keep the viewBox aspect ratio similar, or adjust width:auto handles it.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 32" fill="none">
+  <text x="0" y="25" font-family="'League Gothic','Oswald','Arial Narrow',sans-serif"
+        font-size="30" letter-spacing="0.5" fill="#F05A22" font-weight="700">VNG</text>
+  <text x="64" y="25" font-family="'League Gothic','Oswald','Arial Narrow',sans-serif"
+        font-size="30" letter-spacing="0.5" fill="#FFFFFF" font-weight="700">GAMES</text>
+</svg>
