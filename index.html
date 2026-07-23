@@ -51,6 +51,15 @@
     button[type="submit"]:hover { background: var(--vng-orange-hover); }
     button[type="submit"]:disabled { opacity: .6; cursor: default; box-shadow: none; }
 
+    /* Rating scales for the satisfaction surveys (HM / HRBP / candidate). */
+    .q { margin-bottom: 16px; }
+    .q > label { display: block; margin-bottom: 7px; font-weight: 500; font-size: 13px; color: var(--ink); }
+    .rate { display: flex; gap: 6px; flex-wrap: wrap; }
+    .rate button { width: 34px; height: 34px; border: 1px solid var(--line); background: #fff; color: var(--muted);
+      border-radius: 8px; font: inherit; font-size: 13px; cursor: pointer; transition: border-color .12s, background .12s; }
+    .rate button:hover { border-color: #C9C9C9; }
+    .rate button.on { background: var(--vng-orange); border-color: var(--vng-orange); color: #fff; font-weight: 600; }
+
     .msg { margin-top: 18px; padding: 12px 14px; border-radius: 8px; font-size: 14px; }
     .ok { background: #E7F6EC; color: #1A6E40; border: 1px solid #BBE5C9; }
     .err { background: #FDEAEA; color: #A32D2D; border: 1px solid #F3C9C9; }
@@ -89,6 +98,8 @@
           <label class="section-label">Decision</label>
           <input type="text" name="decision_text" placeholder="your decision" />
         </div>
+        <!-- Satisfaction surveys (HM / HRBP / candidate) render their rating rows here. -->
+        <div id="survey" class="fields hide"></div>
 
         <!-- Interview-only extras (shown for first_interview / second_interview) -->
         <div id="interview_extras" class="hide">
@@ -99,7 +110,7 @@
         </div>
 
         <div class="field" style="margin-top:16px;"><label for="comments">Comments</label>
-          <textarea id="comments" name="comments" required placeholder="Your notes / reasoning"></textarea></div>
+          <textarea id="comments" name="comments" placeholder="Your notes / reasoning"></textarea></div>
         <button type="submit">Submit decision</button>
       </form>
       <div id="out"></div>
@@ -117,7 +128,48 @@
       first_interview: "Interview Verdict",
       second_interview: "Interview Verdict",
       offer_approval: "Offer Approval",
+      hm_satisfaction: "Hiring Experience",
+      hrbp_satisfaction: "Recruiting Partnership",
+      candidate_experience: "Your Experience",
       generic: "Candidate Review",
+    };
+
+    // Satisfaction surveys (Phase 3): 1–5 ratings + a 0–10 "recommend". Answers ride
+    // the pipeline via `extra` (everything except token/decision/comments is stored
+    // as extra_json by the Apps Script and parsed server-side).
+    const SURVEYS = {
+      hm_satisfaction: {
+        intro: "A 30-second read on how hiring is going for you. 1 = poor · 5 = excellent.",
+        questions: [
+          { key: "quality", label: "Quality of candidates shortlisted to you" },
+          { key: "speed", label: "Speed of filling your roles" },
+          { key: "visibility", label: "Visibility into where candidates are" },
+          { key: "communication", label: "Communication from your recruiter" },
+        ],
+        recommend: "Would you recommend this hiring process to another manager?",
+      },
+      hrbp_satisfaction: {
+        intro: "A 30-second read for HR business partners. 1 = poor · 5 = excellent.",
+        subject: "Which team / business unit do you support?",
+        questions: [
+          { key: "data_accuracy", label: "Accuracy & timeliness of recruiting data" },
+          { key: "transparency", label: "Can you see hiring status without chasing?" },
+          { key: "ease", label: "Ease of getting hiring info for planning" },
+          { key: "coordination", label: "Coordination with the TA team" },
+        ],
+        recommend: "Would you recommend the current recruiting process & tools?",
+      },
+      candidate_experience: {
+        intro: "Thanks for your time with us — 30 seconds on how it went. 1 = poor · 5 = excellent.",
+        subject: "How far did you get? (e.g. Applied / Interviewed / Offer)",
+        questions: [
+          { key: "overall", label: "Your overall experience" },
+          { key: "communication", label: "Clear, timely updates" },
+          { key: "timing", label: "The wait between steps felt reasonable" },
+          { key: "respect", label: "You felt treated professionally" },
+        ],
+        recommend: "Would you encourage others to apply to VNGGames?",
+      },
     };
 
     const q = new URLSearchParams(location.search);
@@ -125,12 +177,50 @@
     const purpose = q.get("p") || "generic";   // non-authoritative hint; the app re-derives from the signed token
     const out = document.getElementById("out");
 
+    function scaleRow(key, label, max) {
+      var html = '<div class="q" data-key="' + key + '"><label>' + label + '</label><div class="rate">';
+      for (var i = (max === 10 ? 0 : 1); i <= max; i++) html += '<button type="button" data-v="' + i + '">' + i + '</button>';
+      return html + '</div></div>';
+    }
+    function renderSurvey(p) {
+      var cfg = SURVEYS[p], html = "";
+      if (cfg.subject) html += '<div class="q"><label>' + cfg.subject + '</label><input type="text" id="s_subject" placeholder="Your answer" /></div>';
+      cfg.questions.forEach(function (qq) { html += scaleRow(qq.key, qq.label, 5); });
+      html += scaleRow("recommend", cfg.recommend + "  (0–10)", 10);
+      var el = document.getElementById("survey");
+      el.innerHTML = html;
+      el.querySelectorAll(".rate").forEach(function (group) {
+        group.querySelectorAll("button").forEach(function (b) {
+          b.addEventListener("click", function () {
+            group.querySelectorAll("button").forEach(function (x) { x.classList.remove("on"); });
+            b.classList.add("on");
+          });
+        });
+      });
+    }
+    function collectSurvey() {
+      var el = document.getElementById("survey"), values = {}, missing = false;
+      el.querySelectorAll(".q[data-key]").forEach(function (qq) {
+        var key = qq.getAttribute("data-key"), on = qq.querySelector(".rate button.on");
+        if (on) values[key] = Number(on.getAttribute("data-v"));
+        else if (key !== "recommend") missing = true; // the 1–5 ratings are required; recommend optional
+      });
+      var subj = document.getElementById("s_subject");
+      if (subj && subj.value.trim()) values.subject = subj.value.trim();
+      return { values: values, missing: missing };
+    }
+
     if (!token) {
       out.innerHTML = '<div class="msg err">Invalid or missing link.</div>';
       document.getElementById("f").classList.add("hide");
+    } else if (SURVEYS[purpose]) {
+      document.getElementById("form-title").textContent = TITLES[purpose];
+      document.querySelector(".intro").textContent = SURVEYS[purpose].intro;
+      document.getElementById("survey").classList.remove("hide");
+      renderSurvey(purpose);
     } else {
       document.getElementById("form-title").textContent = TITLES[purpose] || TITLES.generic;
-      const block = document.getElementById(purpose) || document.getElementById("generic");
+      var block = document.getElementById(purpose) || document.getElementById("generic");
       block.classList.remove("hide");
       // Interview rounds share a pass/fail/keep verdict + the extra fields.
       if (purpose === "first_interview" || purpose === "second_interview") {
@@ -143,35 +233,48 @@
       }
     }
 
-    document.getElementById("f").addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const fd = new FormData(e.target);
-      const decision = fd.get("decision") || fd.get("decision_text") || "";
-      const comments = fd.get("comments") || "";
-      if (!decision) { out.innerHTML = '<div class="msg err">Please choose a decision.</div>'; return; }
-      // Interview rounds carry extra structured fields; harmless/empty otherwise.
-      const payload = { token, decision, comments };
-      for (const k of ["strengths", "weaknesses"]) {
-        const v = fd.get(k);
-        if (v != null && String(v).trim() !== "") payload[k] = String(v);
-      }
-      const btn = e.target.querySelector('button[type="submit"]');
+    function post(payload, btn) {
       if (btn) { btn.disabled = true; btn.textContent = "Submitting…"; }
-      try {
-        const resp = await fetch(APPS_SCRIPT_URL, {
-          method: "POST",
-          headers: { "Content-Type": "text/plain;charset=utf-8" }, // text/plain avoids a CORS preflight to Apps Script
-          body: JSON.stringify(payload),
-        });
-        const body = await resp.json();
+      return fetch(APPS_SCRIPT_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" }, // text/plain avoids a CORS preflight to Apps Script
+        body: JSON.stringify(payload),
+      }).then(function (resp) { return resp.json(); }).then(function (body) {
         if (body && body.ok) {
           out.innerHTML = '<div class="msg ok">Thank you — your response was recorded. You can close this page.</div>';
           document.getElementById("f").classList.add("hide");
         } else { throw new Error("server"); }
-      } catch (err) {
+      }).catch(function () {
         out.innerHTML = '<div class="msg err">Could not submit. Please try again or contact the recruiter.</div>';
-        if (btn) { btn.disabled = false; btn.textContent = "Submit decision"; }
+        if (btn) { btn.disabled = false; btn.textContent = "Submit"; }
+      });
+    }
+
+    document.getElementById("f").addEventListener("submit", function (e) {
+      e.preventDefault();
+      var fd = new FormData(e.target);
+      var comments = String(fd.get("comments") || "").trim();
+      var btn = e.target.querySelector('button[type="submit"]');
+
+      // Satisfaction surveys: gather ratings + recommend + subject; comments optional.
+      if (SURVEYS[purpose]) {
+        var c = collectSurvey();
+        if (c.missing) { out.innerHTML = '<div class="msg err">Please rate each item.</div>'; return; }
+        post(Object.assign({ token: token, decision: "submitted", comments: comments }, c.values), btn);
+        return;
       }
+
+      var decision = fd.get("decision") || fd.get("decision_text") || "";
+      var isInterview = purpose === "first_interview" || purpose === "second_interview";
+      var strengths = String(fd.get("strengths") || "").trim();
+      var weaknesses = String(fd.get("weaknesses") || "").trim();
+      if (!decision) { out.innerHTML = '<div class="msg err">Please choose a decision.</div>'; return; }
+      if (isInterview && !strengths) { out.innerHTML = '<div class="msg err">Please fill in Strengths.</div>'; return; }
+      if (isInterview && !weaknesses) { out.innerHTML = '<div class="msg err">Please fill in Weaknesses / concerns.</div>'; return; }
+      if (!comments) { out.innerHTML = '<div class="msg err">Please fill in Comments.</div>'; return; }
+      var payload = { token: token, decision: decision, comments: comments };
+      if (isInterview) { payload.strengths = strengths; payload.weaknesses = weaknesses; }
+      post(payload, btn);
     });
   </script>
 </body>
