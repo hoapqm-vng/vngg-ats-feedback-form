@@ -65,6 +65,10 @@
     .err { background: #FDEAEA; color: #A32D2D; border: 1px solid #F3C9C9; }
     .hide { display: none; }
     .footer-note { margin-top: 18px; font-size: 12px; color: #9A9A9A; }
+    /* Required markers on the interview fields. The rule existed and only spoke up on submit,
+       which is the moment a hiring manager is least willing to go back and write something. */
+    .req { color: #C0392B; font-weight: 700; }
+    .req-note { margin: 4px 0 0; font-size: 12px; color: #6B6B6B; }
   </style>
 </head>
 <body>
@@ -89,6 +93,7 @@
         </div>
         <div id="first_interview" class="fields hide interview-fields"></div>
         <div id="second_interview" class="fields hide interview-fields"></div>
+        <div id="additional_interview" class="fields hide interview-fields"></div>
         <div id="offer_approval" class="fields hide">
           <label class="section-label">Decision</label>
           <div class="opt"><label class="opt"><input type="radio" name="decision" value="approve"> Approve offer</label></div>
@@ -103,10 +108,12 @@
 
         <!-- Interview-only extras (shown for first_interview / second_interview) -->
         <div id="interview_extras" class="hide">
-          <div class="field"><label>Strengths</label>
-            <textarea name="strengths" placeholder="What the candidate did well"></textarea></div>
-          <div class="field"><label>Weaknesses / concerns</label>
-            <textarea name="weaknesses" placeholder="Gaps or risks"></textarea></div>
+          <div class="field"><label>Strengths <span class="req">*</span></label>
+            <textarea name="strengths" required placeholder="What the candidate did well"></textarea></div>
+          <div class="field"><label>Weaknesses / concerns <span class="req">*</span></label>
+            <textarea name="weaknesses" required placeholder="Gaps or risks"></textarea></div>
+          <p class="req-note">Both are required. A verdict with no reasoning cannot be acted on
+            by anyone who was not in the room.</p>
         </div>
 
         <div class="field" style="margin-top:16px;"><label for="comments">Comments</label>
@@ -123,10 +130,24 @@
     const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxTgBf_gukgW5lqrkqvUA55T0JIDZVxyHLvKThZPcNWFHUDmhpoh2i9troQw6RdxuSD/exec";
 
     // Per-purpose page title (display font). Falls back to "Candidate review".
+    /**
+     * Every purpose that is an interview round.
+     *
+     * ONE list, used both to render the verdict options + the Strengths/Weaknesses boxes and to
+     * require them on submit. It was written out twice as
+     * `purpose === "first_interview" || purpose === "second_interview"`, and both copies missed
+     * `additional_interview` — so a 3rd-round interviewer was shown no decision options and no
+     * Strengths/Weaknesses fields at all, and whatever they did send carried no reasoning.
+     *
+     * Keep in step with shared/feedbackPurpose.ts on the app side.
+     */
+    const INTERVIEW_PURPOSES = ["first_interview", "second_interview", "additional_interview"];
+
     const TITLES = {
       hm_cv_review: "CV Review",
       first_interview: "Interview Verdict",
       second_interview: "Interview Verdict",
+      additional_interview: "Interview Verdict",
       offer_approval: "Offer Approval",
       hm_satisfaction: "Hiring Experience",
       hrbp_satisfaction: "Recruiting Partnership",
@@ -223,7 +244,7 @@
       var block = document.getElementById(purpose) || document.getElementById("generic");
       block.classList.remove("hide");
       // Interview rounds share a pass/fail/keep verdict + the extra fields.
-      if (purpose === "first_interview" || purpose === "second_interview") {
+      if (INTERVIEW_PURPOSES.indexOf(purpose) !== -1) {
         block.innerHTML =
           '<label class="section-label">Decision</label>' +
           '<div class="opt"><label class="opt"><input type="radio" name="decision" value="pass"> Pass — advance</label></div>' +
@@ -265,7 +286,7 @@
       }
 
       var decision = fd.get("decision") || fd.get("decision_text") || "";
-      var isInterview = purpose === "first_interview" || purpose === "second_interview";
+      var isInterview = INTERVIEW_PURPOSES.indexOf(purpose) !== -1;
       var strengths = String(fd.get("strengths") || "").trim();
       var weaknesses = String(fd.get("weaknesses") || "").trim();
       if (!decision) { out.innerHTML = '<div class="msg err">Please choose a decision.</div>'; return; }
