@@ -108,10 +108,16 @@
 
         <!-- Interview-only extras (shown for first_interview / second_interview) -->
         <div id="interview_extras" class="hide">
+          <!-- NO `required` in the markup. This block is display:none for a CV review, and a
+               hidden required field silently breaks the WHOLE form: the browser refuses to
+               submit, tries to focus a field it cannot focus, and the submit event never
+               fires — so the page's own validation never runs and the button appears dead.
+               That is exactly what happened to hiring managers on CV screening.
+               `required` is added in JS only while these fields are on screen. -->
           <div class="field"><label>Strengths <span class="req">*</span></label>
-            <textarea name="strengths" required placeholder="What the candidate did well"></textarea></div>
+            <textarea name="strengths" placeholder="What the candidate did well"></textarea></div>
           <div class="field"><label>Weaknesses / concerns <span class="req">*</span></label>
-            <textarea name="weaknesses" required placeholder="Gaps or risks"></textarea></div>
+            <textarea name="weaknesses" placeholder="Gaps or risks"></textarea></div>
           <p class="req-note">Both are required. A verdict with no reasoning cannot be acted on
             by anyone who was not in the room.</p>
         </div>
@@ -251,6 +257,12 @@
           '<div class="opt"><label class="opt"><input type="radio" name="decision" value="fail"> Fail — do not advance</label></div>' +
           '<div class="opt"><label class="opt"><input type="radio" name="decision" value="keep_in_view"> Keep in view</label></div>';
         document.getElementById("interview_extras").classList.remove("hide");
+        // Required ONLY now that they are visible. A required field inside a display:none
+        // block blocks submission of the entire form and cannot be focused to explain why,
+        // which reads to the user as a dead button.
+        document.querySelectorAll("#interview_extras textarea").forEach(function (t) {
+          t.setAttribute("required", "required");
+        });
       }
     }
 
