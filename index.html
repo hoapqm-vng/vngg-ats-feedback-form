@@ -304,7 +304,11 @@
       if (!decision) { out.innerHTML = '<div class="msg err">Please choose a decision.</div>'; return; }
       if (isInterview && !strengths) { out.innerHTML = '<div class="msg err">Please fill in Strengths.</div>'; return; }
       if (isInterview && !weaknesses) { out.innerHTML = '<div class="msg err">Please fill in Weaknesses / concerns.</div>'; return; }
-      if (!comments) { out.innerHTML = '<div class="msg err">Please fill in Comments.</div>'; return; }
+      // Comments is OPTIONAL, and the label says so by carrying no asterisk. It used to be
+      // rejected when empty, which is the worst kind of validation: a field that looks
+      // optional, behaves required, and only says so after the manager presses Submit.
+      // The reasoning we actually need is Strengths + Weaknesses, and those are enforced
+      // above for interviews. A third mandatory box adds friction, not information.
       var payload = { token: token, decision: decision, comments: comments };
       if (isInterview) { payload.strengths = strengths; payload.weaknesses = weaknesses; }
       post(payload, btn);
